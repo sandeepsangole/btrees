@@ -113,6 +113,9 @@ class BTree:
                 child_node.parent_addr = node.my_addr
 
             child_node.index_in_parent = newindex
+            if len(child_node.keys) == len(child_node.children_addrs):
+                child_node.keys.pop()
+
             newindex+=1
             if len(child_node.children_addrs) > 0:
                 child_node.is_leaf = False
