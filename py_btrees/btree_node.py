@@ -9,7 +9,6 @@ KT = TypeVar("KT", bound=Comparable)  # Key Type for generics
 VT = TypeVar("VT", bound=Any)  # Value Type for generics
 
 class BTreeNode(Generic[KT, VT]):
-
     def __init__(self, my_addr: Address, parent_addr: Optional[Address], index_in_parent: Optional[int], is_leaf: bool):
         """
         Create a new BTreeNode. You do not need to edit this class at all, but you can. Be sure to leave the following attributes:
@@ -44,9 +43,6 @@ class BTreeNode(Generic[KT, VT]):
 
     def get_child(self, idx: int) -> BTreeNode:
         return DISK.read(self.children_addrs[idx])
-
-    def get_children(self) -> BTreeNode:
-        return DISK.read(self.children_addrs)
 
     def get_parent(self) -> BTreeNode:
         return DISK.read(self.parent_addr)

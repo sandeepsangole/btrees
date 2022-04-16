@@ -1,5 +1,8 @@
 import bisect
+import math
 from typing import Any, List, Optional, Tuple, Union, Dict, Generic, TypeVar, cast, NewType
+from xmlrpc.client import Boolean
+
 from py_btrees.disk import DISK, Address
 from py_btrees.btree_node import BTreeNode, KT, VT, get_node
 
@@ -40,7 +43,6 @@ Helpful Tips (You will need these):
 --------------------------- BEST OF LUCK ---------------------------
 """
 
-
 # Complete both the find and insert methods to earn full credit
 class BTree:
     def __init__(self, M: int, L: int):
@@ -48,11 +50,11 @@ class BTree:
         Initialize a new BTree.
         You do not need to edit this method, nor should you.
         """
-        self.root_addr: Address = DISK.new()  # Remember, this is the ADDRESS of the root node
+        self.root_addr: Address = DISK.new() # Remember, this is the ADDRESS of the root node
         # DO NOT RENAME THE ROOT MEMBER -- LEAVE IT AS self.root_addr
         DISK.write(self.root_addr, BTreeNode(self.root_addr, None, None, True))
-        self.M = M  # M will fall in the range 2 to 99999
-        self.L = L  # L will fall in the range 1 to 99999
+        self.M = M # M will fall in the range 2 to 99999
+        self.L = L # L will fall in the range 1 to 99999
 
     def insert(self, key: KT, value: VT) -> None:
         """
@@ -61,182 +63,82 @@ class BTree:
         _find_node() method that searches for the node
         that should be our parent (or finds the leaf
         if the key is already present).
+
         Overwrite old values if the key exists in the BTree.
+
         Make sure to write back all changes to the disk!
         """
-
-        """
-            1. Find key to check if it exist
-              1.1. If yes, replace else continue
-            2. Find the leaf where this key can be inserted 
-            3. If the leaf has room (fewer than L elements), insert X
-                and write the leaf back to the disk
-            4. 
-        """
-        root_node = get_node(self.root_addr)
-        self.insert_util(key, value, root_node)
-        self.printNode(root_node)
-
-    def insert_util(self, key, value, node: BTreeNode):
-        # root is none , create root and add key
-        idx, node_to_insert = self.find_rec(key, node, True)
-        node_to_insert.keys.insert(idx, key)
-        node_to_insert.data.insert(idx, value)
-        if self.hasEmptySpace(node_to_insert):
-            DISK.write(node_to_insert.my_addr, node_to_insert)
+        root = get_node(self.root_addr)
+        if self.is_l_full(root) or self.is_m_full(root):
+            new_address = DISK.new()
+            #New node, with is_leaf = False, since the child will be the root
+            new_root = BTreeNode(new_address, None, None, False)
+            # Exchange addresses child-parent parent-child
+            root.parent_addr = new_address
+            new_root.children_addrs.insert(0, self.root_addr)
+            #The new root is the new node we just created
+            self.root_addr = new_address
+            self.split_child(new_root, 0, root)
+            self.insert_node_unfilled(new_root, key, value)
         else:
-            self.split_node(node_to_insert)
-
-    def hasEmptySpace(self, node: BTreeNode):
-        if self.isLeafNode(node):
-            return len(node.keys) <= self.L
+            self.insert_node_unfilled(root, key, value)
+    
+    def insert_node_unfilled(self, node: BTreeNode, key: KT, value:VT) -> None:
+        if node.is_leaf and not self.is_l_full(node):
+            node.insert_data(key, value)
+            node.write_back()
+            return
         else:
-            return len(node.keys) <= self.M - 1
+            idx = bisect.bisect_left(node.keys, key)
+            # idx += 1
+            # Read child from disk
+            child_node = node.get_child(idx)
+            # Let's check if there's space for M.
+            if self.is_m_full(child_node) or self.is_l_full(child_node):
+                self.split_child(node, key, child_node)
+            return self.insert_node_unfilled(child_node, key, value)
+    
+    def split_child(self, node: BTreeNode, idx: int, child_node: BTreeNode) -> None:
+        new_addrs = DISK.new()
+        new_node = BTreeNode(new_addrs, None, None, child_node.is_leaf)
+        
+        # Copy the right side of the children to the new sibling node, in case this is not a leaf
+        if not child_node.is_leaf:
+            # Copy the right side of the keys to the new sibling node
+            new_node.keys = child_node.keys[ceil(self.M//2):]
+            new_node.children_addrs = child_node.children_addrs[(self.M//2)+1:]
+            child_node.children_addrs = child_node.children_addrs[:(self.M//2)+1]
+            # We can promote the key to the parent as well
+            node.keys.insert(idx, child_node.keys[self.M//2])
+            # Now that we have copied the keys to the new node, we can delete them from ourselves.
+            child_node.keys = child_node.keys[:self.M//2]
+        else:
+            # Copy the right side of the keys to the new sibling node
+            new_node.keys = child_node.keys[(self.L//2)+1:]
+            new_node.data = child_node.data[(self.L//2)+1:]
+            child_node.data = child_node.data[:(self.L//2)+1]
+            # We can promote the key to the parent as well
+            node.keys.insert(idx, child_node.keys[self.L//2])
+            # Now that we have copied the keys to the new node, we can delete them from ourselves.
+            child_node.keys = child_node.keys[:self.L//2]
 
-    def isLeafNode(self, node: BTreeNode):
-        return node.is_leaf
+        
+        
+        # Update parent and children pointers
+        child_node.index_in_parent = idx
+        new_node.index_in_parent = idx+1
+        node.children_addrs.insert(idx+1, new_addrs)
+        new_node.parent_addr = node.my_addr
 
-    def merge_up(self, parent_node, node, index):
-        pivot = node.keys[0]
-        parent_node.children_addrs.pop(index)
-        parent_node.children_addrs = parent_node.children_addrs + node.children_addrs
-
-        for i, item in enumerate(parent_node.keys):
-            if pivot < item:
-                parent_node.keys = parent_node.keys[:i] + [pivot] + parent_node.keys[i:]
-                break
-
-            elif i + 1 == len(parent_node.keys):
-                parent_node.keys += [pivot]
-                break
-
-        index = 0
-        for child in parent_node.children_addrs:
-            updated_child = get_node(child)
-            updated_child.index_in_parent = index
-            updated_child.parent_addr = parent_node.my_addr
-            index +=1
-            DISK.write(updated_child.my_addr, updated_child)
-
-        self.set_root_node(parent_node)
-        DISK.write(parent_node.my_addr, parent_node)
-
-    def split_node(self, node: BTreeNode) -> list:
-
-        while not self.hasEmptySpace(node):
-            if self.is_it_root_node(node):
-                node = self.split_node_util(node)
-                self.set_root_node(node)
-            else:
-                par_add = node.parent_addr
-                node = self.split_node_util(node)  # Split & Set node as the 'top' node.
-                parent_node = get_node(par_add)
-                idx = self.find_idx_util(node.keys[0], parent_node)
-                self.merge_up(parent_node, node, idx)
-                node = parent_node
-
-    def split_node_util(self, node: BTreeNode)->BTreeNode:
-
-        l_keys, l_data = self.left_children(node)
-        r_keys, r_data = self.right_children(node)
-        # Move key up to the new root and set
-        mid_key = self.get_mid_index(node)
-
-        top_node = BTreeNode(DISK.new(), None, None, False)
-        top_node.keys.append(l_keys[mid_key - 1])
-
-        new_left_node = BTreeNode(node.my_addr, top_node.my_addr,None, True)
-        new_left_node.keys = new_left_node.keys + l_keys
-        new_left_node.data = new_left_node.data + l_data
-        DISK.write(new_left_node.my_addr, new_left_node)
-
-        new_right_node = BTreeNode(DISK.new(), top_node.my_addr,None, True)
-        new_right_node.keys = new_right_node.keys + r_keys
-        new_right_node.data = new_right_node.data + r_data
-        DISK.write(new_right_node.my_addr, new_right_node)
-
-        top_node.children_addrs.append(new_left_node.my_addr)
-        top_node.children_addrs.append(new_right_node.my_addr)
-
-        return top_node
-
-    def get_root_node(self):
-        return get_node(self.root_addr)
-
-    def set_root_node(self, node: BTreeNode):
-        self.root_addr = node.my_addr
-        DISK.write(node.my_addr, node)
-
-
-    def add_key_to_node(self, key: int, node: BTreeNode):
-        index = self.find_idx_to_insert(key)
-        node.keys.insert(index, key)
-
-    def is_it_root_node(self, node: BTreeNode) -> bool:
-        return node.parent_addr is None
-
-    def set_root(self, root: BTreeNode):
-        self.root_addr = root
-
-    def left_children(self, node) -> list:
-        mid_index = self.get_mid_index(node)
-        keys = node.keys[:mid_index]
-        data = node.data[:mid_index]
-        return keys, data
-
-    def right_children(self, node) -> list:
-        mid_index = self.get_mid_index(node)
-        keys = node.keys[mid_index:]
-        data = node.data[mid_index:]
-        return keys, data
-
-    def get_mid_index(self, node: BTreeNode) -> int:
-        """Return middle index, if number of indexes is odd round it down."""
-        return len(node.keys) // 2
-
-    def get_mid_key(self, node) -> int:
-        """Return key at middle index."""
-        return node.keys[self.get_mid_index()]
-
-    # def set_parent(self, parent: BTreeNode):
-    #     """Set parent"""
-    #     self.parent = parent
-    #
-    # def get_parent(self):
-    #     return self.parent
-    #
-    # def set_parent_for_children(self, parent: BTreeNode = None):
-    #     """
-    #     Set parent for all children of current node.
-    #     Args:
-    #         parent (BTreeNode): parent to set
-    #     """
-    #     if parent is None:
-    #         parent = self
-    #     for child in self.children:
-    #         child.set_parent(parent)
-    #
-    # def number_of_keys(self) -> int:
-    #     """Return number of keys in self.keys"""
-    #     return len(self.keys)
-    #
-    # def number_of_children(self) -> int:
-    #     """Return number of children in self.children"""
-    #     return len(self.children)
-
-    def find_idx_to_insert(self, key, node: BTreeNode = None) -> BTreeNode:
-        if node is None:
-            return node
-
-        return self.find_rec(key, node, True)
-
-    def is_it_full_node(self, node: BTreeNode) -> bool:
-        if node is None:
-            return False
-        return len(node.keys) > self.maxKeysAllowed()
-
-    def maxKeysAllowed(self):
-        return self.M - 1
+        child_node.write_back()
+        new_node.write_back()
+        node.write_back()        
+    
+    def is_m_full(self, node: BTreeNode) -> bool:
+        return len(node.keys) == self.M+1
+    
+    def is_l_full(self, node: BTreeNode) -> bool:
+        return len(node.data) == self.L
 
     def find(self, key: KT) -> Optional[VT]:
         """
@@ -246,75 +148,23 @@ class BTree:
         This should be implemented with a logarithmic search
         in the node.keys array, not a linear search. Look at the
         BTreeNode.find_idx() method for an example of using
-        the builtin bisect library to search for a number in
+        the builtin bisect library to search for a number in 
         a sorted array in logarithmic time.
-
-            1. Get Root
-            2. find if key is in root ( there will be multiple keys in root)
-            3. Based on key value and closest matching key , go to left or right
-            4. Repeat until you find key or reach leaf
-            5. return value or None
         """
-        root_node = self.get_root_node()
-        if root_node is None:
-            return None
-
-        self.find_rec(key, root_node)
-
-    def find_idx_util(self, key: KT, node: BTreeNode) -> Optional[int]:
-        """
-        Finds the index in self.keys where `key`
-        should go, if it were inserted into the keys list.
-
-        Assumes the keys array is sorted. Works in logarithmic time.
-        """
-        # Get index of key
-        return bisect.bisect_left(node.keys, key)
-
-    def find_rec(self, key, bt_node, return_index_node=False):
-        if bt_node.is_leaf:
-            if return_index_node:
-                idx = bt_node.find_idx(key)
-                return idx, bt_node
-
-            if key in bt_node.keys:
-                return self.find_data_util(key)
-            else:
-                return None
-        else:
-            # match with key if its <= go to left else match with next key, if last go to right
-            index = 0
-            while index < len(bt_node.keys) and key > bt_node.keys[index]:
-                index += 1
-            if index < len(bt_node.keys) and key <= bt_node.keys[index]:
-                return self.find_rec(key, DISK.read(bt_node.children_addrs[index]),return_index_node)
-            else:
-                return self.find_rec(key,  DISK.read(bt_node.children_addrs[index]),return_index_node)
-
-    def find_data_util(self, key: KT, node:BTreeNode) -> Optional[VT]:
-        """
-        Given a key, retrieve the data associated with that key.
-        Returns None if key is not present in self.keys.
-        Only valid on leaf nodes.
-
-        Works in logarithmic time using find_idx.
-        """
-        idx = self.find_idx_util(key, node)
-        # We can use the index we would insert at, and check if that entry has the key we need
-        if idx < len(node.keys) and node.keys[idx] == key:
-            return node.data[idx]
+        temp = get_node(self.root_addr)
+        if temp.keys:
+            return self.find_helper(temp, key)
         return None
 
+    def find_helper(self, node: BTreeNode, key: KT) -> Optional[VT]:
+        #bisect right?
+        idx = bisect.bisect_left(node.keys, key)
+        if idx < len(node.keys) and node.keys[idx] == key and node.is_leaf:
+            return node.data[idx]
+        if node.is_leaf:
+            return None
+        child_node = node.get_child(idx)
+        return self.find_helper(child_node, key)
+    
     def delete(self, key: KT) -> None:
         raise NotImplementedError("Karma method delete()")
-
-    def printNode(self, node):
-        print('Keys:', '|'.join([str(y) for y in node.keys]))
-        if node.parent_addr:
-            print('Parent Keys:', "|".join([str(y) for y in get_node(node.parent_addr).keys]))
-        else:
-            print('Root')
-        print('Index in parent:', node.index_in_parent)
-        print('Child keys:', [DISK.read(x).keys for x in node.children_addrs])
-        print('')
-
