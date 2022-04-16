@@ -1,5 +1,4 @@
 import bisect
-import math
 from typing import Any, List, Optional, Tuple, Union, Dict, Generic, TypeVar, cast, NewType
 from xmlrpc.client import Boolean
 
@@ -105,13 +104,13 @@ class BTree:
         # Copy the right side of the children to the new sibling node, in case this is not a leaf
         if not child_node.is_leaf:
             # Copy the right side of the keys to the new sibling node
-            new_node.keys = child_node.keys[ceil(self.M//2):]
+            new_node.keys = child_node.keys[(self.M//2)+1:]
             new_node.children_addrs = child_node.children_addrs[(self.M//2)+1:]
-            child_node.children_addrs = child_node.children_addrs[:(self.M//2)+1]
+            child_node.children_addrs = child_node.children_addrs[:(self.M//2)]
             # We can promote the key to the parent as well
             node.keys.insert(idx, child_node.keys[self.M//2])
             # Now that we have copied the keys to the new node, we can delete them from ourselves.
-            child_node.keys = child_node.keys[:self.M//2]
+            child_node.keys = child_node.keys[:(self.M//2)+1]
         else:
             # Copy the right side of the keys to the new sibling node
             new_node.keys = child_node.keys[(self.L//2)+1:]
@@ -120,7 +119,7 @@ class BTree:
             # We can promote the key to the parent as well
             node.keys.insert(idx, child_node.keys[self.L//2])
             # Now that we have copied the keys to the new node, we can delete them from ourselves.
-            child_node.keys = child_node.keys[:self.L//2]
+            child_node.keys = child_node.keys[:(self.L//2)+1]
 
         
         
