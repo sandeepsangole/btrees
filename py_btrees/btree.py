@@ -265,16 +265,16 @@ class BTree:
 
     def left_children(self, node) -> list:
         mid_index = self.get_mid_index(node)
-        keys = node.keys[:mid_index]
-        data = node.data[:mid_index]
-        children = node.children_addrs[:mid_index]
+        keys = node.keys[:mid_index + 1]
+        data = node.data[:mid_index + 1]
+        children = node.children_addrs[:mid_index + 1]
         return keys, data, children
 
     def right_children(self, node) -> list:
         mid_index = self.get_mid_index(node)
-        keys = node.keys[mid_index:]
-        data = node.data[mid_index:]
-        children = node.children_addrs[mid_index:]
+        keys = node.keys[mid_index + 1:]
+        data = node.data[mid_index + 1:]
+        children = node.children_addrs[mid_index + 1:]
         return keys, data, children
 
     def get_mid_index(self, node: BTreeNode) -> int:
