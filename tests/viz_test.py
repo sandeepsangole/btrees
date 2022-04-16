@@ -6,13 +6,18 @@ def insert_and_find_odd():
     M = 5
     L = 3
     btree = BTree(M, L)
-    for i in range(12):
+    for i in range(13):
         btree.insert(i, str(i))
 
-    # btree.insert(12, '123')
+    # btree.insert(12, '12')
     g = graph.create(btree)
     # print(g.source)
     g.view()
+
+    # btree.insert(12, '123')
+    # g = graph.create(btree)
+    # # print(g.source)
+    # g.view()
     # for i in range(0, -100):
     #     btree.insert(i, str(i))
 

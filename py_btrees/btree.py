@@ -85,9 +85,12 @@ class BTree:
             DISK.write(node_to_insert.my_addr, node_to_insert)
         else:
             new_root = self.split_node(node_to_insert)
-            self.updatedIndexInParent(new_root)
-            self.set_root_node(new_root)
-            DISK.write(self.root_addr, get_node(self.root_addr))
+            if new_root.parent_addr is None:
+                self.updatedIndexInParent(new_root)
+                self.set_root_node(new_root)
+                DISK.write(self.root_addr, get_node(self.root_addr))
+            else:
+                new_root.write_back()
 
     def hasEmptySpace(self, node: BTreeNode):
         if self.isLeafNode(node):
@@ -106,7 +109,9 @@ class BTree:
         newindex = index
         for child in node.children_addrs:
             child_node = get_node(child)
-            child_node.parent_addr = parent_node.my_addr
+            if not self.hasEmptySpace(parent_node):
+                child_node.parent_addr = node.my_addr
+
             child_node.index_in_parent = newindex
             newindex+=1
             if len(child_node.children_addrs) > 0:
@@ -139,12 +144,46 @@ class BTree:
             updated_child = get_node(child)
             updated_child.index_in_parent = index
             updated_child.parent_addr = parent_node.my_addr
+            if len(updated_child.keys) == len(updated_child.children_addrs):
+                updated_child.keys.pop()
             index +=1
             if len(updated_child.children_addrs) > 0:
                 updated_child.is_leaf = False
             updated_child.write_back()
 
-    def split_node(self, node: BTreeNode) -> list:
+    def updateIndexRec(self, parent_node):
+        if parent_node and parent_node.children_addrs and len(parent_node.children_addrs) == 0:
+            return
+
+        index = 0
+        queue = []
+        queue.append([child for child in parent_node.children_addrs])
+
+        while len(queue) > 0:
+            node = queue.pop()
+            updated_child = get_node(node)
+            updated_child.index_in_parent = index
+            updated_child.parent_addr = parent_node.my_addr
+            index +=1
+            if len(updated_child.children_addrs) > 0:
+                updated_child.is_leaf = False
+            updated_child.write_back()
+            queue.append([child for child in node.children_addrs])
+
+
+        # for child in parent_node.children_addrs:
+        #     queue.append(child)
+        #
+        #     updated_child = get_node(child)
+        #     updated_child.index_in_parent = index
+        #     updated_child.parent_addr = parent_node.my_addr
+        #     index +=1
+        #     if len(updated_child.children_addrs) > 0:
+        #         updated_child.is_leaf = False
+        #     updated_child.write_back()
+        #     return self.updateIndexRec(child)
+
+    def split_node(self, node: BTreeNode) -> BTreeNode:
 
         while not self.hasEmptySpace(node):
             if self.is_it_root_node(node):
@@ -156,6 +195,8 @@ class BTree:
                 node = self.split_node_util(node)  # Split & Set node as the 'top' node.
                 parent_node = get_node(par_add)
                 idx = self.find_idx_util(node.keys[0], parent_node)
+
+                # If sibling doesnt satisfy m/2 property then merge
                 self.merge_up(parent_node, node, idx)
                 node = parent_node
         return node
@@ -170,18 +211,32 @@ class BTree:
         top_node = BTreeNode(DISK.new(), None, None, False)
         top_node.keys.append(l_keys[mid_key - 1])
 
-        new_left_node = BTreeNode(DISK.new(), node.parent_addr,None, True)
+        if node.parent_addr and self.hasEmptySpace(node.get_parent()):
+            parentAdd = node.parent_addr
+        else:
+            parentAdd = top_node.my_addr
+
+        new_left_node = BTreeNode(DISK.new(), parentAdd,None, True)
         new_left_node.keys = new_left_node.keys + l_keys
         new_left_node.data = new_left_node.data + l_data
         new_left_node.children_addrs = new_left_node.children_addrs + left_children
         new_left_node.write_back()
 
-        new_right_node = BTreeNode(DISK.new(), node.parent_addr,None, True)
+        for child in new_left_node.children_addrs:
+            cnode = get_node(child)
+            cnode.parent_addr = new_left_node.my_addr
+            cnode.write_back()
+
+        new_right_node = BTreeNode(DISK.new(), parentAdd,None, True)
         new_right_node.keys = new_right_node.keys + r_keys
         new_right_node.data = new_right_node.data + r_data
         new_right_node.children_addrs = new_right_node.children_addrs + right_children
-        # DISK.write(new_right_node.my_addr, new_right_node)
         new_right_node.write_back()
+
+        for child in new_right_node.children_addrs:
+            cnode = get_node(child)
+            cnode.parent_addr = new_right_node.my_addr
+            cnode.write_back()
 
         top_node.children_addrs.append(new_left_node.my_addr)
         top_node.children_addrs.append(new_right_node.my_addr)

@@ -46,10 +46,10 @@ def test_btree_properties() -> None:
     M = 5
     L = 3
     btree = BTree(M, L)
-    for i in range(100):
+    for i in range(12):
         btree.insert(i, str(i))
-    for i in range(0, -100):
-        btree.insert(i, str(i))
+    # for i in range(0, -100):
+    #     btree.insert(i, str(i))
 
     root_addr = btree.root_addr
 

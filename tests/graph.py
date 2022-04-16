@@ -13,7 +13,6 @@ def create(tree: BTree) -> None:
                          node_attr={'shape': 'record', 'height': '.1'})
 
     d = index_nodes(tree)
-
     for node in d.values():
         name = str(node.my_addr)
         label = None
@@ -38,7 +37,7 @@ def create(tree: BTree) -> None:
 
         for i, childAddr in enumerate(node.children_addrs):
             child = d[childAddr]
-            my_label = str(child.index_in_parent) +":"+str(child.my_addr)+":"+str(child.parent_addr)
+            my_label = str(child.index_in_parent) +":C"+str(child.my_addr)+":P"+str(child.parent_addr)+":"+str(child.is_leaf)
             g.edge(f'{name}:f{i}', str(child.my_addr), label=my_label)
 
     return g
