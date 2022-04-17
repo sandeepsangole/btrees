@@ -1,5 +1,6 @@
 import bisect
 from typing import Any, List, Optional, Tuple, Union, Dict, Generic, TypeVar, cast, NewType
+from xmlrpc.client import Boolean
 
 from py_btrees.disk import DISK, Address
 from py_btrees.btree_node import BTreeNode, KT, VT, get_node
@@ -81,10 +82,12 @@ class BTree:
     def split_root(self,root):
         # Assuming that we are splitting the root(no parent)
         assert root.parent_addr == None
+        print('splitting root')
         # Create a new root, which will not be a leaf
         new_root = BTreeNode(DISK.new(), None, None, False)
         # If the root is a leaf, we will make it a child of the new_root and then split it
         if root.is_leaf:
+            print('root is leaf')
             root.parent_addr = new_root.my_addr
             root.index_in_parent = 0
             new_root.children_addrs.append(root.my_addr)
@@ -92,6 +95,7 @@ class BTree:
             new_root.write_back()
             self.split_leaf(root)
         else:
+            print('root is not leaf')
             root.parent_addr = new_root.my_addr
             root.index_in_parent = 0
             new_root.children_addrs.append(root.my_addr)
@@ -103,10 +107,12 @@ class BTree:
         print('splitting internal')
         if node.parent_addr == None:
             self.split_root(node)
+            return None
         parent_node = node.get_parent()
         # Find the median of the full node + inserted value and values before/after it
         # Bisecting left (values less than or equal to the median to the left, greater than to the right)
-        mid_key = node.keys[self.get_mid_index(node) - 1]
+        if len(node.keys) > 0:
+            mid_key = node.keys[self.get_mid_index(node) - 1]
         print('mid key is')
         print(mid_key)
         l_keys, l_data, left_children = self.left_children(node)
@@ -157,7 +163,8 @@ class BTree:
         parent_node = node.get_parent()
         # Find the median of the full node + inserted value and values before/after it
         # Bisecting left (values less than or equal to the median to the left, greater than to the right)
-        mid_key = node.keys[self.get_mid_index(node) - 1]
+        if len(node.keys) > 0:
+            mid_key = node.keys[self.get_mid_index(node) - 1]
         print('mid key is')
         print(mid_key)
         l_keys, l_data, left_children = self.left_children(node)
