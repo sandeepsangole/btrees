@@ -209,11 +209,17 @@ class BTree:
 
         l_keys, l_data, left_children = self.left_children(node)
         r_keys, r_data, right_children = self.right_children(node)
-        # Move key up to the new root and set
         mid_key = self.get_mid_index(node)
+        # Move key up to the new root and set
+        if len(l_keys) > len(r_keys) and node.is_leaf:
+            bisect.insort_right(r_keys, l_keys.pop())
+            bisect.insort_right(r_data, l_data.pop())
+            node.keys.pop()
+            node.keys.append(max(l_keys))
+            mid_key -=1
 
         top_node = BTreeNode(DISK.new(), None, None, False)
-        top_node.keys.append(l_keys[mid_key - 1])
+        top_node.keys.append(max(l_keys))
 
         if node.parent_addr and self.hasEmptySpace(node.get_parent()):
             parentAdd = node.parent_addr
@@ -266,21 +272,41 @@ class BTree:
 
     def left_children(self, node) -> list:
         mid_index = self.get_mid_index(node)
-        keys = node.keys[:mid_index]
-        data = node.data[:mid_index]
-        children = node.children_addrs[:mid_index]
+
+        keys = node.keys[:mid_index + 1]
+        data = node.data[:mid_index + 1]
+        children = node.children_addrs[:mid_index + 1]
         return keys, data, children
 
     def right_children(self, node) -> list:
         mid_index = self.get_mid_index(node)
-        keys = node.keys[mid_index:]
-        data = node.data[mid_index:]
-        children = node.children_addrs[mid_index:]
+
+        keys = node.keys[mid_index + 1:]
+        data = node.data[mid_index + 1:]
+        children = node.children_addrs[mid_index + 1:]
         return keys, data, children
 
     def get_mid_index(self, node: BTreeNode) -> int:
         """Return middle index, if number of indexes is odd round it down."""
-        return len(node.keys) // 2
+        return (len(node.keys) // 2)
+
+    # def left_children(self, node) -> list:
+    #     mid_index = self.get_mid_index(node)
+    #     keys = node.keys[:mid_index]
+    #     data = node.data[:mid_index]
+    #     children = node.children_addrs[:mid_index]
+    #     return keys, data, children
+    #
+    # def right_children(self, node) -> list:
+    #     mid_index = self.get_mid_index(node)
+    #     keys = node.keys[mid_index:]
+    #     data = node.data[mid_index:]
+    #     children = node.children_addrs[mid_index:]
+    #     return keys, data, children
+    #
+    # def get_mid_index(self, node: BTreeNode) -> int:
+    #     """Return middle index, if number of indexes is odd round it down."""
+    #     return (len(node.keys) // 2)
 
     def get_mid_key(self, node) -> int:
         """Return key at middle index."""
