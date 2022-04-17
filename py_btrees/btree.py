@@ -68,73 +68,126 @@ class BTree:
         Make sure to write back all changes to the disk!
         """
         root = get_node(self.root_addr)
-        if self.is_l_full(root) or self.is_m_full(root):
-            new_address = DISK.new()
-            #New node, with is_leaf = False, since the child will be the root
-            new_root = BTreeNode(new_address, None, None, False)
-            # Exchange addresses child-parent parent-child
-            root.parent_addr = new_address
-            new_root.children_addrs.insert(0, self.root_addr)
-            #The new root is the new node we just created
-            self.root_addr = new_address
-            self.split_child(new_root, 0, root)
-            self.insert_node_unfilled(new_root, key, value)
-        else:
-            self.insert_node_unfilled(root, key, value)
+        if root.is_leaf and self.is_l_full(root):
+            self.increase_height(root)
+
+        leaf_node = self.find_leaf(key)
+        self.insert_node_unfilled(leaf_node, key, value)
+    
+    def increase_height(self, node:BTreeNode) -> None:
+        new_address = DISK.new()
+        #New node, with is_leaf = False, since the child will be the root
+        new_root = BTreeNode(new_address, None, None, False)
+        # Exchange addresses child-parent parent-child
+        node.parent_addr = new_address
+        new_root.children_addrs.insert(0, self.root_addr)
+        #The new root is the new node we just created
+        self.root_addr = new_address
+        self.split_child(new_root, 0, node)
+
+
+    def find_leaf(self, key: KT) -> BTreeNode:
+        temp = get_node(self.root_addr)
+        while not temp.is_leaf:
+            i = 0
+            while i < len(temp.keys) and key > temp.keys[i]:
+                i += 1
+            temp = get_node(temp.children_addrs[i])
+        return temp
     
     def insert_node_unfilled(self, node: BTreeNode, key: KT, value:VT) -> None:
-        if node.is_leaf and not self.is_l_full(node):
+        if not self.is_l_full(node) and node.is_leaf:
             node.insert_data(key, value)
             node.write_back()
             return
         else:
-            idx = bisect.bisect_left(node.keys, key)
-            # idx += 1
-            # Read child from disk
-            child_node = node.get_child(idx)
-            # Let's check if there's space for M.
-            if self.is_m_full(child_node) or self.is_l_full(child_node):
-                self.split_child(node, key, child_node)
-            return self.insert_node_unfilled(child_node, key, value)
+            parent = get_node(node.parent_addr)
+            # Insert Left
+            if self.insert_left(node, parent, key, value):
+                return
+            if self.insert_right(node, parent, key, value):
+                return
+            self.split_child(parent, node.index_in_parent, node)
+            node.insert_data(key, value)
+            node.write_back()
+            if self.is_m_full(parent):
+                grandparent_node = get_node(parent)
+                self.split_child(grandparent_node, node.index_in_parent, parent)
+
     
-    def split_child(self, node: BTreeNode, idx: int, child_node: BTreeNode) -> None:
+    def insert_left(self, node: BTreeNode, parent_node:BTreeNode, key:KT, value:VT) -> bool:
+        idx = node.index_in_parent
+        if idx and idx-1 >= 0:
+            left_child = get_node(parent_node.children_addrs[idx-1])
+            if not self.is_l_full(left_child):
+                key_idx = bisect.bisect_left(parent_node.keys, left_child.keys[-1])
+                left_child.insert_data(node.keys.pop(0), node.data.pop(0))
+                parent_node.keys.pop(key_idx)
+                node.insert_data(key, value)
+                parent_node.keys.insert(key_idx, left_child.keys[-1])
+                node.write_back()
+                parent_node.write_back()
+            return True
+        return False
+    
+    def insert_right(self, node: BTreeNode, parent_node:BTreeNode, key:KT, value:VT) -> bool:
+        idx = node.index_in_parent
+        if idx and idx+1 > 0 and idx+1<len(parent_node.children_addrs):
+            right_child = get_node(parent_node.children_addrs[idx+1])
+            if not self.is_l_full(right_child):
+                key_idx = bisect.bisect_left(parent_node.keys, node.keys[-1])
+                node.insert_data(key, value)
+                right_child.insert_data(node.keys.pop(-1), node.data.pop(-1))
+                parent_node.keys.pop(key_idx)
+                parent_node.keys.insert(key_idx, node.keys[-1])
+                node.write_back()
+                parent_node.write_back()
+            return True
+        return False
+
+    def split_child(self, parent_node: BTreeNode, idx: int, node: BTreeNode) -> None:
+        if parent_node == None and node.my_addr == self.root_addr:
+            self.increase_height(node)
+            
         new_addrs = DISK.new()
-        new_node = BTreeNode(new_addrs, None, None, child_node.is_leaf)
+        new_node = BTreeNode(new_addrs, None, None, node.is_leaf)
         
         # Copy the right side of the children to the new sibling node, in case this is not a leaf
-        if not child_node.is_leaf:
+        if not node.is_leaf:
             # Copy the right side of the keys to the new sibling node
-            new_node.keys = child_node.keys[(self.M//2)+1:]
-            new_node.children_addrs = child_node.children_addrs[(self.M//2)+1:]
-            child_node.children_addrs = child_node.children_addrs[:(self.M//2)]
+            new_node.keys = node.keys[(self.M//2)+1:]
+            new_node.children_addrs = node.children_addrs[(self.M//2)+1:]
+            node.children_addrs = node.children_addrs[:(self.M//2)+1]
             # We can promote the key to the parent as well
-            node.keys.insert(idx, child_node.keys[self.M//2])
+            parent_node.keys.insert(idx, node.keys[self.M//2])
             # Now that we have copied the keys to the new node, we can delete them from ourselves.
-            child_node.keys = child_node.keys[:(self.M//2)+1]
+            node.keys = node.keys[:(self.M//2)]
         else:
             # Copy the right side of the keys to the new sibling node
-            new_node.keys = child_node.keys[(self.L//2)+1:]
-            new_node.data = child_node.data[(self.L//2)+1:]
-            child_node.data = child_node.data[:(self.L//2)+1]
+            new_node.keys = node.keys[(self.L//2)+1:]
+            new_node.data = node.data[(self.L//2)+1:]
+            node.data = node.data[:(self.L//2)+1]
             # We can promote the key to the parent as well
-            node.keys.insert(idx, child_node.keys[self.L//2])
+            parent_node.keys.insert(idx, node.keys[self.L//2])
             # Now that we have copied the keys to the new node, we can delete them from ourselves.
-            child_node.keys = child_node.keys[:(self.L//2)+1]
-
-        
+            node.keys = node.keys[:(self.L//2)+1]
         
         # Update parent and children pointers
-        child_node.index_in_parent = idx
+        node.index_in_parent = idx
         new_node.index_in_parent = idx+1
-        node.children_addrs.insert(idx+1, new_addrs)
-        new_node.parent_addr = node.my_addr
+        parent_node.children_addrs.insert(idx+1, new_addrs)
+        new_node.parent_addr = parent_node.my_addr
 
-        child_node.write_back()
+        node.write_back()
         new_node.write_back()
-        node.write_back()        
+        parent_node.write_back()
+
+        if self.is_m_full(parent_node):
+            grandparent_node = get_node(parent_node)
+            return self.split_child(grandparent_node, parent_node.index_in_parent, parent_node)      
     
     def is_m_full(self, node: BTreeNode) -> bool:
-        return len(node.keys) == self.M+1
+        return len(node.children_addrs) > self.M
     
     def is_l_full(self, node: BTreeNode) -> bool:
         return len(node.data) == self.L
