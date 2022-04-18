@@ -123,7 +123,7 @@ class BTree:
         l_keys = l_keys[:-1]
         # Create a new internal node and copy into it all the keys which appear after the median
         new_internal_node = BTreeNode(DISK.new(), node.parent_addr, None, False)
-        new_internal_node.keys = new_internal_node.data + r_keys
+        new_internal_node.keys = new_internal_node.keys + r_keys
         # Copy into its children_addrs all leaves that would go with it
         new_internal_node.children_addrs = new_internal_node.children_addrs + right_children
         self.update_index_in_parent(new_internal_node)
@@ -174,7 +174,7 @@ class BTree:
         print(r_keys)
         # Create a new leaf node and copy into it all the keys which appear after the median
         new_leaf_node = BTreeNode(DISK.new(), node.parent_addr, None, True)
-        new_leaf_node.keys = new_leaf_node.data + r_keys
+        new_leaf_node.keys = new_leaf_node.keys + r_keys
         new_leaf_node.data = new_leaf_node.data + r_data
         # Clear the old leaf node and replace it with left children data
         node.keys = []
