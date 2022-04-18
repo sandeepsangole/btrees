@@ -144,6 +144,7 @@ class BTree:
         new_internal_node.write_back()
         node.write_back()
         parent_node.write_back()
+        self.update_index_in_parent(parent_node)
         # If the new parent is now full, split again
         if len(parent_node.keys) > self.M - 1:
             self.split_internal(parent_node)
@@ -186,16 +187,18 @@ class BTree:
         # Add additional child pointer from parent to the new node
         parent_node.children_addrs.insert(idx+1, new_leaf_node.my_addr)
         # Update index_in_parents
-        new_leaf_node.index_in_parent = idx+1
+        # new_leaf_node.index_in_parent = idx+1
+
         # Write everything back
         new_leaf_node.write_back()
         node.write_back()
         parent_node.write_back()
+        self.update_index_in_parent(parent_node)
         # If the parent of the full node is now full
         if len(parent_node.keys) > self.M - 1:
             self.split_internal(parent_node)
 
-    
+
     def hasEmptySpace(self, node: BTreeNode):
         if node.is_leaf:
             return len(node.keys) <= self.L
