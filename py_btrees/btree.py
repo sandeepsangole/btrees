@@ -144,6 +144,7 @@ class BTree:
         new_internal_node.write_back()
         node.write_back()
         parent_node.write_back()
+        self.update_index_in_parent(parent_node)
         # If the new parent is now full, split again
         if len(parent_node.keys) > self.M - 1:
             self.split_internal(parent_node)
