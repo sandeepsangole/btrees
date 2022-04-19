@@ -265,6 +265,22 @@ class BTree:
             index = bt_node.find_idx(key)
             #print(index)
             return self.find_rec(key,bt_node.get_child(index),return_index_node)
+    
+    def find_rec_delete(self, key, bt_node, return_index_node=False):
+        if bt_node.is_leaf:
+            data = bt_node.find_data(key)
+            if return_index_node and data != None:
+                #print('returning node')
+                return bt_node
+            else:
+                #print('looking for data')
+                return data
+        else:
+            #print('searching for index with key')
+            #print(key)
+            index = bt_node.find_idx(key)
+            #print(index)
+            return self.find_rec_delete(key,bt_node.get_child(index),return_index_node)
 
     def printTree(self,printLeaves=True):
         q=[(get_node(self.root_addr),0)]
@@ -284,8 +300,10 @@ class BTree:
     def delete(self, key: KT) -> None:
         print('deleting')
         print(key)
+        # Search the tree for the leaf node containing the key we hope to delete.
         root = get_node(self.root_addr)
-        node_for_delete = self.find_rec(key, root, True)
+        node_for_delete = self.find_rec_delete(key, root, True)
+        # If we don't find the node, there's nothing to delete and we end the deletion.
         if node_for_delete == None:
             print('nothing to delete')
             return
@@ -309,18 +327,44 @@ class BTree:
                 rightsibling = None
             if leftsibling != None and len(leftsibling.keys) >= self.L / 2 + 1:
                 print('transfer_left')
-                self.transfer_leaf_left(leftsibling,node_for_delete,parentnode)
+                self.transfer_leaf(leftsibling,node_for_delete,parentnode)
             elif rightsibling != None and len(rightsibling.keys) >= self.L / 2 + 1:
                 print('transfer_right')
-                self.transfer_leaf_right(rightsibling,node_for_delete,parentnode)
+                self.transfer_leaf(rightsibling,node_for_delete,parentnode,True)
             elif leftsibling != None:
                 print('merge_left')
                 self.merge_leaf_left(leftsibling,node_for_delete,parentnode)
             elif rightsibling != None:
                 print('merge_right')
                 self.merge_leaf_right(rightsibling,node_for_delete,parentnode)
+
+    def transfer_leaf(self,sibling,tonode,parentnode,right=False):
+        if right:
+            lastkey = sibling.keys[0]
+            searchkey = sibling.keys[0]
+            lastdata = sibling.data[0]
+        else:
+            lastkey = sibling.keys[-1]
+            searchkey = sibling.keys[-2]
+            lastdata = sibling.data[-1]
+        sibling.keys.remove(lastkey)
+        sibling.data.remove(lastdata)
+        tonodekeyidx = tonode.find_idx(lastkey)
+        tonode.keys.insert(tonodekeyidx, lastkey)
+        tonode.data.insert(tonodekeyidx, lastdata)
+        parentkeyidx = parentnode.find_idx(searchkey)
+        if right:
+            if len(parentnode.keys) > 1:
+                parentnode.keys[parentkeyidx-1] = searchkey
+            else:
+                parentnode.keys[0] = searchkey
+        else:
+            parentnode.keys[parentkeyidx] = searchkey
+        sibling.write_back()
+        tonode.write_back()
+        parentnode.write_back()
     
-    def transfer_leaf_left(self,leftsibling,tonode,parentnode):
+    '''def transfer_leaf_left(self,leftsibling,tonode,parentnode):
         lastkey = leftsibling.keys[-1]
         searchkey = leftsibling.keys[-2]
         lastdata = leftsibling.data[-1]
@@ -339,23 +383,19 @@ class BTree:
         lastkey = rightsibling.keys[0]
         searchkey = rightsibling.keys[0]
         lastdata = rightsibling.data[0]
-        #print(rightsibling.data)
         rightsibling.keys.remove(lastkey)
         rightsibling.data.remove(lastdata)
         tonodekeyidx = tonode.find_idx(lastkey)
         tonode.keys.insert(tonodekeyidx, lastkey)
         tonode.data.insert(tonodekeyidx, lastdata)
         parentkeyidx = parentnode.find_idx(searchkey)
-        print(parentkeyidx)
-        if parentkeyidx > len(parentnode.keys) - 1:
-            parentnode.keys[parentkeyidx-1] = searchkey
-        elif len(parentnode.keys) > 1:
+        if len(parentnode.keys) > 1:
             parentnode.keys[parentkeyidx-1] = searchkey
         else:
             parentnode.keys[0] = searchkey
         rightsibling.write_back()
         tonode.write_back()
-        parentnode.write_back()
+        parentnode.write_back()'''
     
     def merge_leaf_left(self,leftsibling,tonode,parentnode):
         lastkey = tonode.keys
@@ -390,4 +430,4 @@ class BTree:
         tonode.write_back()
         parentnode.write_back()
         self.update_index_in_parent(parentnode)
-    
+       
