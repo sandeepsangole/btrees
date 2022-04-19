@@ -398,21 +398,76 @@ class BTree:
         parentnode.write_back()'''
     
     def merge_leaf_left(self,leftsibling,tonode,parentnode):
+        #Copy keys and data
         lastkey = tonode.keys
         lastdata = tonode.data
+        # Delete keys, data and index
         tonode.keys = []
         tonode.data = []
         assert len(tonode.keys) == 0
         tonode.parent_addr = None
+        # Merge values
         leftsibling.keys = leftsibling.keys + lastkey
         leftsibling.data = leftsibling.data + lastdata
+
+        #Delete key and right subtree
         parentnode.children_addrs.remove(tonode.my_addr)
         assert tonode.index_in_parent != 0
         parentnode.keys.remove(parentnode.keys[tonode.index_in_parent - 1])
+        #Update changes
         leftsibling.write_back()
         tonode.write_back()
         parentnode.write_back()
         self.update_index_in_parent(parentnode)
+
+        #Check if we should merge parent node
+        if len(parentnode.children_addrs) < self.M // 2:
+            leftsibling, rightsibling = self.get_node_siblings(parentnode)
+            if leftsibling:
+                self.merge_node_left(leftsibling, parentnode, get_node(parentnode.parent_addr))
+            else:
+                self.merge_node_right(rightsibling, parentnode, get_node(parentnode.parent_addr))
+
+    def get_node_siblings(self, parentnode):
+        if parentnode.index_in_parent >= 1:
+            leftsibling = get_node(parentnode.children_addrs[parentnode.index_in_parent - 1])
+        else:
+            leftsibling = None
+        if parentnode.index_in_parent < len(parentnode.keys):
+            rightsibling = get_node(parentnode.children_addrs[parentnode.index_in_parent + 1])
+        else:
+            rightsibling = None
+        return leftsibling, rightsibling
+
+    
+    def merge_node_left(self, leftsibling, tonode, parentnode):
+        #Save what we are going to transfer
+        lastkeys = leftsibling.keys
+        lastchildren = leftsibling.children
+        #Delete what was left
+        leftsibling.children = []
+        leftsibling.keys = []
+        leftsibling.parent_addr = None
+        #Transfer information
+        tonode.keys = tonode.keys + lastkeys
+        tonode.children = tonode.children +lastchildren
+        #Update parent
+        parentnode.children_addrs.remove(leftsibling.my_addr)
+        parentnode.keys.remove(parentnode.keys[tonode.index_in_parent - 1])
+        #Update changes
+        leftsibling.write_back()
+        tonode.write_back()
+        parentnode.write_back()
+        self.update_index_in_parent(parentnode)
+
+        #Check if we should merge parent node
+        if len(parentnode.children_addrs) < self.M // 2:
+            leftsibling, rightsibling = self.get_node_siblings(parentnode)
+            if leftsibling:
+                self.merge_node_left(leftsibling, parentnode, get_node(parentnode.parent_addr))
+            else:
+                self.merge_node_right(rightsibling, parentnode, get_node(parentnode.parent_addr))
+
     
     def merge_leaf_right(self,rightsibling,tonode,parentnode):
         lastkey = rightsibling.keys
