@@ -316,6 +316,10 @@ class BTree:
             node_for_delete.write_back()
             return
         else:
+            # If we're deleting from a leaf root
+            if node_for_delete.parent_addr == None and node_for_delete.my_addr == self.root_addr:
+                node_for_delete.write_back()
+                return
             parentnode = node_for_delete.get_parent()
             if node_for_delete.index_in_parent >= 1:
                 leftsibling = get_node(parentnode.children_addrs[node_for_delete.index_in_parent - 1])
@@ -403,16 +407,18 @@ class BTree:
         tonode.keys = []
         tonode.data = []
         assert len(tonode.keys) == 0
+        parentkey = parentnode.keys[tonode.index_in_parent-1]
         tonode.parent_addr = None
         leftsibling.keys = leftsibling.keys + lastkey
         leftsibling.data = leftsibling.data + lastdata
-        parentnode.children_addrs.remove(tonode.my_addr)
-        assert tonode.index_in_parent != 0
-        parentnode.keys.remove(parentnode.keys[tonode.index_in_parent - 1])
+        #parentnode.children_addrs.remove(tonode.my_addr)
+        #assert tonode.index_in_parent != 0
+        #parentnode.keys.remove(parentnode.keys[tonode.index_in_parent - 1])
         leftsibling.write_back()
         tonode.write_back()
         parentnode.write_back()
-        self.update_index_in_parent(parentnode)
+        self.update_index_in_parent(leftsibling)
+        self.delete_internal(parentkey, parentnode)
     
     def merge_leaf_right(self,rightsibling,tonode,parentnode):
         lastkey = rightsibling.keys
@@ -420,14 +426,150 @@ class BTree:
         rightsibling.keys = []
         rightsibling.data = []
         assert len(rightsibling.keys) == 0
+        parentkey = parentnode.keys[tonode.index_in_parent]
         rightsibling.parent_addr = None
         tonode.keys = tonode.keys + lastkey
         tonode.data = tonode.data + lastdata
-        parentnode.children_addrs.remove(rightsibling.my_addr)
-        assert rightsibling.index_in_parent != 0
-        parentnode.keys.remove(parentnode.keys[rightsibling.index_in_parent - 1])
+        #parentnode.children_addrs.remove(rightsibling.my_addr)
+        #assert rightsibling.index_in_parent != 0
+        #parentnode.keys.remove(parentnode.keys[rightsibling.index_in_parent - 1])
         rightsibling.write_back()
         tonode.write_back()
         parentnode.write_back()
-        self.update_index_in_parent(parentnode)
-       
+        self.update_index_in_parent(tonode)
+        self.delete_internal(parentkey, parentnode)
+    
+    def delete_internal(self,key,node_for_delete):
+        # Delete
+        print('deleting internal')
+        idx = node_for_delete.find_idx(key)
+        print('idx')
+        print(idx)
+        print('key')
+        print(key)
+        print(node_for_delete.get_child(idx+1).keys)
+        node_for_delete.keys.remove(key)
+        assert node_for_delete.get_child(idx+1).parent_addr == None
+        node_for_delete.children_addrs.remove(node_for_delete.children_addrs[idx+1])
+        # Check underflow
+        if len(node_for_delete.children_addrs) >= self.M / 2:
+            print('deleted, no transfers or merges')
+            node_for_delete.write_back()
+            self.update_index_in_parent(node_for_delete)
+            return
+        # Node underflow
+        else:
+            # Check for root underflow
+            if node_for_delete.parent_addr == None and node_for_delete.my_addr == self.root_addr:
+                if len(node_for_delete.keys) == 0 and len(node_for_delete.children_addrs) == 1:
+                    # root has only one child, reassign root
+                    print('reassigning root')
+                    new_root = node_for_delete.get_child(0)
+                    node_for_delete.children_addrs = []
+                    new_root.parent_addr = None
+                    new_root.index_in_parent = None
+                    self.root_addr = new_root.my_addr
+                    new_root.write_back()
+                    node_for_delete.write_back()
+                    self.update_index_in_parent(new_root)
+                    return
+                else:
+                    print('root underflow')
+                    node_for_delete.write_back()
+                    self.update_index_in_parent(node_for_delete)
+                    return
+            parentnode = node_for_delete.get_parent()
+            if node_for_delete.index_in_parent >= 1:
+                leftsibling = get_node(parentnode.children_addrs[node_for_delete.index_in_parent - 1])
+            else:
+                leftsibling = None
+            if node_for_delete.index_in_parent < len(parentnode.keys):
+                rightsibling = get_node(parentnode.children_addrs[node_for_delete.index_in_parent + 1])
+            else:
+                rightsibling = None
+            if leftsibling != None and len(leftsibling.children_addrs) >= self.M / 2 + 1:
+                print('transfer_internal_left')
+                self.transfer_internal_left(leftsibling,node_for_delete,parentnode)
+            elif rightsibling != None and len(rightsibling.children_addrs) >= self.M / 2 + 1:
+                print('transfer_internal_right')
+                self.transfer_internal_right(rightsibling,node_for_delete,parentnode,True)
+            elif leftsibling != None:
+                print('merge_internal_left')
+                self.merge_internal_left(leftsibling,node_for_delete,parentnode)
+            elif rightsibling != None:
+                print('merge_internal_right')
+                self.merge_internal_right(rightsibling,node_for_delete,parentnode)
+
+
+    def transfer_internal_left(self,sibling,tonode,parentnode,right=False):
+        lastkey = sibling.keys[-1]
+        #secondtolastkey = sibling.keys[-2]
+        searchkey = parentnode.keys[sibling.index_in_parent]
+        lastlink = sibling.children_addrs[-1]
+        sibling.keys.remove(lastkey)
+        sibling.children_addrs.remove(lastlink)
+        tonodekeyidx = tonode.find_idx(searchkey)
+        tonode.keys.insert(tonodekeyidx, searchkey)
+        tonode.children_addrs.insert(tonodekeyidx, lastlink)
+        parentnode.keys[sibling.index_in_parent] = lastkey
+        sibling.write_back()
+        tonode.write_back()
+        parentnode.write_back()
+        self.update_index_in_parent(sibling)
+        self.update_index_in_parent(tonode)
+    
+    def transfer_internal_right(self,sibling,tonode,parentnode,right=False):
+        lastkey = sibling.keys[0]
+        searchkey = parentnode.keys[sibling.index_in_parent-1]
+        lastlink = sibling.children_addrs[0]
+        sibling.keys.remove(lastkey)
+        sibling.children_addrs.remove(lastlink)
+        tonodekeyidx = tonode.find_idx(searchkey)
+        tonode.keys.insert(tonodekeyidx, searchkey)
+        tonode.children_addrs.insert(tonodekeyidx+1, lastlink)
+        parentnode.keys[sibling.index_in_parent-1] = lastkey
+        sibling.write_back()
+        tonode.write_back()
+        parentnode.write_back()
+        self.update_index_in_parent(sibling)
+        self.update_index_in_parent(tonode)
+    
+    def merge_internal_left(self, leftsibling, tonode, parentnode):
+        lastkey = tonode.keys
+        lastchildren = tonode.children_addrs
+        tonode.keys = []
+        tonode.children_addrs = []
+        parentkey = parentnode.keys[tonode.index_in_parent-1]
+        assert len(tonode.keys) == 0
+        tonode.parent_addr = None
+        leftsibling.keys.append(parentkey)
+        leftsibling.keys = leftsibling.keys + lastkey
+        leftsibling.children_addrs = leftsibling.children_addrs + lastchildren
+        #parentnode.children_addrs.remove(tonode.my_addr)
+        #assert tonode.index_in_parent != 0
+        #parentnode.keys.remove(parentnode.keys[tonode.index_in_parent - 1])
+        leftsibling.write_back()
+        tonode.write_back()
+        parentnode.write_back()
+        self.update_index_in_parent(leftsibling)
+        self.delete_internal(parentkey,parentnode)
+    
+    def merge_internal_right(self, rightsibling, tonode, parentnode):
+        lastkey = rightsibling.keys
+        lastchildren = rightsibling.children_addrs
+        rightsibling.keys = []
+        rightsibling.children_addrs = []
+        parentkey = parentnode.keys[tonode.index_in_parent]
+        assert len(rightsibling.keys) == 0
+        rightsibling.parent_addr = None
+        tonode.keys.append(parentkey)
+        tonode.keys = tonode.keys + lastkey
+        tonode.children_addrs = tonode.children_addrs + lastchildren
+        #parentnode.children_addrs.remove(rightsibling.my_addr)
+        #assert rightsibling.index_in_parent != 0
+        #parentnode.keys.remove(parentnode.keys[rightsibling.index_in_parent - 1])
+        rightsibling.write_back()
+        tonode.write_back()
+        parentnode.write_back()
+        self.update_index_in_parent(tonode)
+        self.delete_internal(parentkey,parentnode)
