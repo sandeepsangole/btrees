@@ -84,7 +84,7 @@ class BTree:
     def split_root(self,root):
         # Assuming that we are splitting the root(no parent)
         assert root.parent_addr == None
-        print('splitting root')
+        #print('splitting root')
         # Create a new root, which will not be a leaf
         new_root = BTreeNode(DISK.new(), None, None, False)
         # If the root is a leaf, we will make it a child of the new_root and then split it
@@ -106,7 +106,7 @@ class BTree:
             self.split_internal(root)
     
     def split_internal(self, node): 
-        print('splitting internal')
+        #print('splitting internal')
         if node.parent_addr == None:
             self.split_root(node)
             return None
@@ -161,7 +161,7 @@ class BTree:
             
 
     def split_leaf(self, node):
-        print('splitting leaf')
+        #print('splitting leaf')
         # Assuming the parent of the full node is not full
         parent_node = node.get_parent()
         # Find the median of the full node + inserted value and values before/after it
@@ -298,21 +298,21 @@ class BTree:
                     q.insert(0,(get_node(childAddr),i+1))
     
     def delete(self, key: KT) -> None:
-        print('deleting')
-        print(key)
+        #print('deleting')
+        #print(key)
         # Search the tree for the leaf node containing the key we hope to delete.
         root = get_node(self.root_addr)
         node_for_delete = self.find_rec_delete(key, root, True)
         # If we don't find the node, there's nothing to delete and we end the deletion.
         if node_for_delete == None:
-            print('nothing to delete')
+            #print('nothing to delete')
             return
         dataidx = node_for_delete.find_idx(key)
         node_for_delete.keys.remove(key)
         #print(node_for_delete.keys)
         node_for_delete.data.remove(node_for_delete.data[dataidx])
         if len(node_for_delete.keys) >= self.L / 2:
-            print('deleted, no transfers or merges')
+            #print('deleted, no transfers or merges')
             node_for_delete.write_back()
             return
         else:
@@ -330,16 +330,16 @@ class BTree:
             else:
                 rightsibling = None
             if leftsibling != None and len(leftsibling.keys) >= self.L / 2 + 1:
-                print('transfer_left')
+                #print('transfer_left')
                 self.transfer_leaf(leftsibling,node_for_delete,parentnode)
             elif rightsibling != None and len(rightsibling.keys) >= self.L / 2 + 1:
-                print('transfer_right')
+                #print('transfer_right')
                 self.transfer_leaf(rightsibling,node_for_delete,parentnode,True)
             elif leftsibling != None:
-                print('merge_left')
+                #print('merge_left')
                 self.merge_leaf_left(leftsibling,node_for_delete,parentnode)
             elif rightsibling != None:
-                print('merge_right')
+                #print('merge_right')
                 self.merge_leaf_right(rightsibling,node_for_delete,parentnode)
             elif rightsibling == None and leftsibling == None and self.L == 1 and self.M == 2:
                 # Recurse up in the case of L = 1, M = 2
@@ -374,40 +374,7 @@ class BTree:
         sibling.write_back()
         tonode.write_back()
         parentnode.write_back()
-    
-    '''def transfer_leaf_left(self,leftsibling,tonode,parentnode):
-        lastkey = leftsibling.keys[-1]
-        searchkey = leftsibling.keys[-2]
-        lastdata = leftsibling.data[-1]
-        leftsibling.keys.remove(lastkey)
-        leftsibling.data.remove(lastdata)
-        tonodekeyidx = tonode.find_idx(lastkey)
-        tonode.keys.insert(tonodekeyidx, lastkey)
-        tonode.data.insert(tonodekeyidx, lastdata)
-        parentkeyidx = parentnode.find_idx(searchkey)
-        parentnode.keys[parentkeyidx] = searchkey
-        leftsibling.write_back()
-        tonode.write_back()
-        parentnode.write_back()
-    
-    def transfer_leaf_right(self,rightsibling,tonode,parentnode):
-        lastkey = rightsibling.keys[0]
-        searchkey = rightsibling.keys[0]
-        lastdata = rightsibling.data[0]
-        rightsibling.keys.remove(lastkey)
-        rightsibling.data.remove(lastdata)
-        tonodekeyidx = tonode.find_idx(lastkey)
-        tonode.keys.insert(tonodekeyidx, lastkey)
-        tonode.data.insert(tonodekeyidx, lastdata)
-        parentkeyidx = parentnode.find_idx(searchkey)
-        if len(parentnode.keys) > 1:
-            parentnode.keys[parentkeyidx-1] = searchkey
-        else:
-            parentnode.keys[0] = searchkey
-        rightsibling.write_back()
-        tonode.write_back()
-        parentnode.write_back()'''
-    
+        
     def merge_leaf_left(self,leftsibling,tonode,parentnode):
         lastkey = tonode.keys
         lastdata = tonode.data
@@ -454,19 +421,19 @@ class BTree:
     
     def delete_internal_edge(self,node_for_delete):
         # Delete
-        print('deleting internal edge')
-        print('key')
-        print(node_for_delete.keys)
+        #print('deleting internal edge')
+        #print('key')
+        #print(node_for_delete.keys)
         if len(node_for_delete.keys) > 0:
             node_for_delete.keys = []
             assert node_for_delete.get_child(1).parent_addr == None
             node_for_delete.children_addrs.remove(node_for_delete.children_addrs[1])
-            print(node_for_delete.children_addrs)
+            #print(node_for_delete.children_addrs)
         # Check for root underflow
         if node_for_delete.parent_addr == None and node_for_delete.my_addr == self.root_addr:
             if len(node_for_delete.children_addrs) == 1:
                 # root has only one child, reassign root
-                print('reassigning root')
+                #print('reassigning root')
                 new_root = node_for_delete.get_child(0)
                 node_for_delete.children_addrs = []
                 new_root.parent_addr = None
@@ -477,7 +444,7 @@ class BTree:
                 self.update_index_in_parent(new_root)
                 return
             else:
-                print('root underflow')
+                #print('root underflow')
                 node_for_delete.write_back()
                 self.update_index_in_parent(node_for_delete)
                 return
@@ -491,10 +458,10 @@ class BTree:
         else:
             rightsibling = None
         if leftsibling != None:
-            print('merge_internal_left_edge')
+            #print('merge_internal_left_edge')
             self.merge_internal_left_edge(leftsibling,node_for_delete,parentnode)
         elif rightsibling != None:
-            print('merge_internal_right_edge')
+            #print('merge_internal_right_edge')
             self.merge_internal_right_edge(rightsibling,node_for_delete,parentnode)
         elif rightsibling == None and leftsibling == None:
             # Recurse up in the case of L = 1, M = 2
@@ -546,19 +513,19 @@ class BTree:
     
     def delete_internal(self,key,node_for_delete):
         # Delete
-        print('deleting internal')
+        #print('deleting internal')
         idx = node_for_delete.find_idx(key)
-        print('idx')
-        print(idx)
-        print('key')
-        print(key)
-        print(node_for_delete.get_child(idx+1).keys)
+        #print('idx')
+        #print(idx)
+        #print('key')
+        #print(key)
+        #print(node_for_delete.get_child(idx+1).keys)
         node_for_delete.keys.remove(key)
         assert node_for_delete.get_child(idx+1).parent_addr == None
         node_for_delete.children_addrs.remove(node_for_delete.children_addrs[idx+1])
         # Check underflow
         if len(node_for_delete.children_addrs) >= self.M / 2:
-            print('deleted, no transfers or merges')
+            #print('deleted, no transfers or merges')
             node_for_delete.write_back()
             self.update_index_in_parent(node_for_delete)
             return
@@ -568,7 +535,7 @@ class BTree:
             if node_for_delete.parent_addr == None and node_for_delete.my_addr == self.root_addr:
                 if len(node_for_delete.keys) == 0 and len(node_for_delete.children_addrs) == 1:
                     # root has only one child, reassign root
-                    print('reassigning root')
+                    #print('reassigning root')
                     new_root = node_for_delete.get_child(0)
                     node_for_delete.children_addrs = []
                     new_root.parent_addr = None
@@ -579,7 +546,7 @@ class BTree:
                     self.update_index_in_parent(new_root)
                     return
                 else:
-                    print('root underflow')
+                    #print('root underflow')
                     node_for_delete.write_back()
                     self.update_index_in_parent(node_for_delete)
                     return
@@ -593,16 +560,16 @@ class BTree:
             else:
                 rightsibling = None
             if leftsibling != None and len(leftsibling.children_addrs) >= self.M / 2 + 1:
-                print('transfer_internal_left')
+                #print('transfer_internal_left')
                 self.transfer_internal_left(leftsibling,node_for_delete,parentnode)
             elif rightsibling != None and len(rightsibling.children_addrs) >= self.M / 2 + 1:
-                print('transfer_internal_right')
+                #print('transfer_internal_right')
                 self.transfer_internal_right(rightsibling,node_for_delete,parentnode,True)
             elif leftsibling != None:
-                print('merge_internal_left')
+                #print('merge_internal_left')
                 self.merge_internal_left(leftsibling,node_for_delete,parentnode)
             elif rightsibling != None:
-                print('merge_internal_right')
+                #print('merge_internal_right')
                 self.merge_internal_right(rightsibling,node_for_delete,parentnode)
 
 
